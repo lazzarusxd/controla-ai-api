@@ -1,23 +1,8 @@
-"""
-Medição do saldo consolidado (Projeto N2, ESW441).
-
-Dispara N requisições sequenciais a GET /v1/users/{user_id}/transactions/balance, do mesmo jeito que o
-baseline da Semana 1 (loop de N chamadas), e reporta latência média, percentis e vazão. Usa apenas a
-biblioteca padrão, então roda no host sem precisar da venv do projeto.
-
-Para comparar "antes" e "depois" com o mesmo código, suba a API com BALANCE_CACHE_ENABLED=false, meça,
-suba com BALANCE_CACHE_ENABLED=true e meça de novo, gravando os dois resultados no mesmo CSV:
-
-    python scripts/benchmark_balance.py --label sem-cache --csv resultados.csv
-    python scripts/benchmark_balance.py --label com-cache --csv resultados.csv
-
-Com --write-every K, a cada K leituras o script cadastra um lançamento, o que força a invalidação na escrita e
-mostra o custo do MISS seguinte (taxa de acerto esperada: 1 - 1/K).
-"""
 import csv
 import sys
 import json
 import time
+import random
 import base64
 import argparse
 import statistics
@@ -25,13 +10,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
+from datetime import date, datetime, timedelta, timezone
 
 
-DEFAULT_USER_ID = "00000000-0000-7000-8000-000000000442"
 DEFAULT_CLIENT_ID = "esw441-n2-benchmark"
-DEFAULT_CLIENT_SECRET = "esw441-n2-benchmark-somente-dev"  # segredo público, apenas para desenvolvimento
+DEFAULT_USER_ID = "00000000-0000-7000-8000-000000000442"
+DEFAULT_CLIENT_SECRET = "esw441-n2-benchmark-somente-dev"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -47,6 +32,12 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--end-date", default=None, help="Filtro end_date (AAAA-MM-DD).")
     parser.add_argument("--projection-until", default=None, help="Filtro projection_until (AAAA-MM-DD).")
     parser.add_argument("--label", default="medicao", help="Rótulo do cenário, gravado no CSV.")
+    parser.add_argument(
+        "--mode",
+        default="repeat",
+        choices=["repeat", "miss"],
+        help="repeat: sempre a mesma consulta (com cache, 1 MISS e N-1 HIT). miss: consulta inédita a cada leitura."
+    )
     parser.add_argument("--csv", default=None, help="Arquivo CSV onde acrescentar o resultado.")
     parser.add_argument("--timeout", type=float, default=30.0)
 
@@ -85,12 +76,12 @@ def issue_token(arguments: argparse.Namespace) -> str:
     return str(token["access_token"])
 
 
-def balance_url(arguments: argparse.Namespace) -> str:
+def balance_url(arguments: argparse.Namespace, projection_until: Optional[str] = None) -> str:
     query = {
         key: value for key, value in (
             ("start_date", arguments.start_date),
             ("end_date", arguments.end_date),
-            ("projection_until", arguments.projection_until)
+            ("projection_until", projection_until or arguments.projection_until)
         ) if value
     }
     suffix = f"?{urllib.parse.urlencode(query)}" if query else ""
@@ -140,13 +131,20 @@ def main() -> int:
     samples_ms: List[float] = []
     started = time.perf_counter()
 
+    miss_base = date(2200, 1, 1) + timedelta(days=random.randint(0, 2_000_000))
+
     for index in range(arguments.requests):
         if arguments.write_every > 0 and index > 0 and index % arguments.write_every == 0:
             writes += 1
             create_transaction(arguments=arguments, headers=headers, sequence=writes)
 
+        target = url
+
+        if arguments.mode == "miss":
+            target = balance_url(arguments, projection_until=(miss_base + timedelta(days=index)).isoformat())
+
         before = time.perf_counter()
-        request_json(url=url, method="GET", headers=headers, timeout=arguments.timeout)
+        request_json(url=target, method="GET", headers=headers, timeout=arguments.timeout)
         samples_ms.append((time.perf_counter() - before) * 1000)
 
     total_seconds = time.perf_counter() - started
@@ -166,7 +164,7 @@ def main() -> int:
         "req_per_s": round(arguments.requests / total_seconds, 1)
     }
 
-    print(f"\nCenário: {result['label']}  |  {url}")
+    print(f"\nCenário: {result['label']} (modo {arguments.mode})  |  {url}")
     print(f"N = {result['requests']} leituras, {result['writes']} escritas intercaladas")
     print(f"Tempo total ........ {result['total_s']} s")
     print(f"Tempo médio ........ {result['mean_ms']} ms")
