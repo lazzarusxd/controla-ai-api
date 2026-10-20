@@ -1,0 +1,9 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+CREATE EXTENSION IF NOT EXISTS "unaccent";
+
+CREATE SCHEMA IF NOT EXISTS controla_ai;
+ALTER DATABASE controlaai SET search_path TO controla_ai, public;
+
+SET TIME ZONE 'America/Sao_Paulo';
