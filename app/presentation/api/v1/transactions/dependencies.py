@@ -2,20 +2,26 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.config.settings import ServiceSettings, get_settings
 from app.application.interfaces import ITransactionRepository
+from app.infra.cache.redis_client import RedisClient, get_redis_client
 from app.infra.database.postgres import PostgresPool, get_postgres_pool
-from app.infra.repositories.transaction_repository import TransactionRepository
 from app.application.usecases.transactions.get_transaction import GetTransactionUseCase
 from app.application.usecases.transactions.list_transactions import ListTransactionsUseCase
 from app.application.usecases.transactions.create_transaction import CreateTransactionUseCase
 from app.application.usecases.transactions.delete_transaction import DeleteTransactionUseCase
 from app.application.usecases.transactions.update_transaction import UpdateTransactionUseCase
 from app.application.usecases.transactions.review_transaction import ReviewTransactionUseCase
+from app.infra.repositories.transaction_repository_factory import build_transaction_repository
 from app.application.usecases.transactions.get_consolidated_balance import GetConsolidatedBalanceUseCase
 
 
-def get_transaction_repository(pool: Annotated[PostgresPool, Depends(get_postgres_pool)]) -> ITransactionRepository:
-    return TransactionRepository(pool)
+def get_transaction_repository(
+        pool: Annotated[PostgresPool, Depends(get_postgres_pool)],
+        redis_client: Annotated[RedisClient, Depends(get_redis_client)],
+        service_settings: Annotated[ServiceSettings, Depends(get_settings)]
+) -> ITransactionRepository:
+    return build_transaction_repository(pool=pool, redis_client=redis_client, settings=service_settings)
 
 
 def get_create_transaction_usecase(

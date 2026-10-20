@@ -13,11 +13,11 @@ from app.infra.storage.local_receipt_storage import LocalReceiptStorage
 from app.infra.repositories.receipt_repository import ReceiptRepository
 from app.infra.providers.tesseract_ocr_engine import TesseractOcrEngine
 from app.infra.providers.http_webhook_notifier import HttpWebhookNotifier
-from app.infra.repositories.transaction_repository import TransactionRepository
 from app.infra.providers.openai_receipt_extractor import OpenAiReceiptExtractor
 from app.infra.repositories.partner_webhook_repository import PartnerWebhookRepository
 from app.application.services.receipt_processing_service import ReceiptProcessingService
 from app.application.services.receipt_notification_service import ReceiptNotificationService
+from app.infra.repositories.transaction_repository_factory import build_transaction_repository
 
 
 async def process_receipt(ctx: Dict[str, Any], partner_id: str, user_id: str, receipt_id: str) -> str:
@@ -29,10 +29,10 @@ async def process_receipt(ctx: Dict[str, Any], partner_id: str, user_id: str, re
 
     processing_service = ReceiptProcessingService(
         receipt_repository=ReceiptRepository(postgres),
-        transaction_repository=TransactionRepository(postgres),
         confidence_threshold=Decimal(str(settings.OCR_CONFIDENCE_THRESHOLD)),
         receipt_storage=LocalReceiptStorage(storage_root=settings.RECEIPT_STORAGE_ROOT),
         ocr_engine=TesseractOcrEngine(language=settings.OCR_LANGUAGE, usage_meter=usage_meter),
+        transaction_repository=build_transaction_repository(pool=postgres, redis_client=redis, settings=settings),
         receipt_extractor=OpenAiReceiptExtractor(
             usage_meter=usage_meter,
             model=settings.LLM_MODEL,

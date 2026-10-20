@@ -10,7 +10,14 @@ from app.infra.repositories.erasure_repository import ErasureRepository
 from app.infra.storage.local_receipt_storage import LocalReceiptStorage
 from app.infra.database.postgres import PostgresPool, get_postgres_pool
 from app.application.usecases.erasure.erase_account import EraseAccountUseCase
-from app.application.interfaces import IErasureRepository, IExportPurger, IExportStorage, IReceiptStorage
+from app.infra.repositories.transaction_repository_factory import build_balance_cache
+from app.application.interfaces import (
+    IExportPurger,
+    IExportStorage,
+    IReceiptStorage,
+    IErasureRepository,
+    IConsolidatedBalanceCache
+)
 
 
 def get_erasure_repository(pool: Annotated[PostgresPool, Depends(get_postgres_pool)]) -> IErasureRepository:
@@ -35,13 +42,22 @@ def get_receipt_file_storage(service_settings: Annotated[ServiceSettings, Depend
     return LocalReceiptStorage(storage_root=service_settings.RECEIPT_STORAGE_ROOT)
 
 
+def get_balance_cache(
+        redis_client: Annotated[RedisClient, Depends(get_redis_client)],
+        service_settings: Annotated[ServiceSettings, Depends(get_settings)]
+) -> IConsolidatedBalanceCache:
+    return build_balance_cache(redis_client=redis_client, settings=service_settings)
+
+
 def get_erase_account_usecase(
         export_purger: Annotated[IExportPurger, Depends(get_export_purger)],
         receipt_storage: Annotated[IReceiptStorage, Depends(get_receipt_file_storage)],
         export_storage: Annotated[IExportStorage, Depends(get_export_artifact_storage)],
+        balance_cache: Annotated[IConsolidatedBalanceCache, Depends(get_balance_cache)],
         erasure_repository: Annotated[IErasureRepository, Depends(get_erasure_repository)]
 ) -> EraseAccountUseCase:
     return EraseAccountUseCase(
+        balance_cache=balance_cache,
         export_purger=export_purger,
         export_storage=export_storage,
         receipt_storage=receipt_storage,

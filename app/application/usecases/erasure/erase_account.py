@@ -5,7 +5,13 @@ from app.config.logging_setup import logger
 from app.domain.value_objects import ErasureManifest
 from app.application.dto import AccountErasureResultDTO, EraseAccountRequestDTO
 from app.domain.exceptions.erasure_exceptions import AccountNotFoundError, ErasureNotConfirmedError
-from app.application.interfaces import IErasureRepository, IExportPurger, IExportStorage, IReceiptStorage
+from app.application.interfaces import (
+    IExportPurger,
+    IExportStorage,
+    IReceiptStorage,
+    IErasureRepository,
+    IConsolidatedBalanceCache
+)
 
 
 class EraseAccountUseCase:
@@ -15,8 +21,10 @@ class EraseAccountUseCase:
             export_purger: IExportPurger,
             export_storage: IExportStorage,
             receipt_storage: IReceiptStorage,
-            erasure_repository: IErasureRepository
+            erasure_repository: IErasureRepository,
+            balance_cache: IConsolidatedBalanceCache
     ) -> None:
+        self._balance_cache = balance_cache
         self._export_purger = export_purger
         self._export_storage = export_storage
         self._receipt_storage = receipt_storage
@@ -30,6 +38,11 @@ class EraseAccountUseCase:
 
         if erased is None:
             raise AccountNotFoundError()
+
+        await self._balance_cache.invalidate_user(
+            user_id=erase_account_request.user_id,
+            partner_id=erase_account_request.partner_id
+        )
 
         export_file_paths = await self._export_purger.purge_user(
             user_id=erase_account_request.user_id,

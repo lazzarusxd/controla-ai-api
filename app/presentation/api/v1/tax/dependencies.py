@@ -5,18 +5,23 @@ from fastapi import Depends
 
 from app.config.settings import ServiceSettings, get_settings
 from app.domain.value_objects import ProgressiveTaxTable, TaxPolicy
+from app.infra.cache.redis_client import RedisClient, get_redis_client
 from app.infra.database.postgres import PostgresPool, get_postgres_pool
-from app.infra.repositories.transaction_repository import TransactionRepository
 from app.infra.repositories.tax_deduction_repository import TaxDeductionRepository
 from app.application.usecases.tax.get_tax_deductions import GetTaxDeductionsUseCase
 from app.application.interfaces import ITaxDeductionRepository, ITransactionRepository
 from app.application.services.tax_consolidation_service import TaxConsolidationService
 from app.application.usecases.tax.get_refund_projection import GetRefundProjectionUseCase
+from app.infra.repositories.transaction_repository_factory import build_transaction_repository
 from app.application.usecases.tax.recalculate_tax_deductions import RecalculateTaxDeductionsUseCase
 
 
-def get_transaction_repository(pool: Annotated[PostgresPool, Depends(get_postgres_pool)]) -> ITransactionRepository:
-    return TransactionRepository(pool)
+def get_transaction_repository(
+        pool: Annotated[PostgresPool, Depends(get_postgres_pool)],
+        redis_client: Annotated[RedisClient, Depends(get_redis_client)],
+        service_settings: Annotated[ServiceSettings, Depends(get_settings)]
+) -> ITransactionRepository:
+    return build_transaction_repository(pool=pool, redis_client=redis_client, settings=service_settings)
 
 
 def get_tax_deduction_repository(pool: Annotated[PostgresPool, Depends(get_postgres_pool)]) -> ITaxDeductionRepository:

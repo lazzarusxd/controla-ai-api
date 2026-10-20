@@ -30,6 +30,7 @@ from .i_pricing_plan_repository import IPricingPlanRepository
 from .i_subscription_repository import ISubscriptionRepository
 from .i_refresh_token_repository import IRefreshTokenRepository
 from .i_tax_deduction_repository import ITaxDeductionRepository
+from .i_consolidated_balance_cache import IConsolidatedBalanceCache
 from .i_partner_webhook_repository import IPartnerWebhookRepository
 from .i_assistant_message_repository import IAssistantMessageRepository
 from .i_subscription_notification_repository import ISubscriptionNotificationRepository
@@ -68,6 +69,7 @@ __all__ = [
     "ITaxDeductionRepository",
     "ISubscriptionRepository",
     "IRefreshTokenRepository",
+    "IConsolidatedBalanceCache",
     "IPartnerWebhookRepository",
     "IAssistantMessageRepository",
     "ISubscriptionNotificationRepository"

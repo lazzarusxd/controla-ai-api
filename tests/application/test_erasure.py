@@ -4,8 +4,8 @@ from typing import Dict, List, Optional
 import pytest
 
 from app.domain.types import ErasedResource
-from app.domain.value_objects import ErasureManifest
-from app.application.dto import ErasedAccountDTO, EraseAccountRequestDTO
+from app.domain.value_objects import ConsolidatedBalance, ErasureManifest
+from app.application.dto import ConsolidatedBalanceRequestDTO, ErasedAccountDTO, EraseAccountRequestDTO
 from app.application.usecases.erasure.erase_account import EraseAccountUseCase
 from app.domain.exceptions.erasure_exceptions import (
     AccountNotFoundError,
@@ -67,6 +67,28 @@ class FakeExportPurger:
         return list(self.file_paths)
 
 
+class FakeBalanceCache:
+
+    def __init__(self) -> None:
+        self.invalidated: List[UUID] = []
+
+    async def get(self, consolidated_balance_request: ConsolidatedBalanceRequestDTO) -> Optional[ConsolidatedBalance]:
+        _ = consolidated_balance_request
+
+        return None
+
+    async def put(
+            self,
+            consolidated_balance: ConsolidatedBalance,
+            consolidated_balance_request: ConsolidatedBalanceRequestDTO
+    ) -> None:
+        _ = consolidated_balance, consolidated_balance_request
+
+    async def invalidate_user(self, partner_id: UUID, user_id: UUID) -> None:
+        _ = partner_id
+        self.invalidated.append(user_id)
+
+
 class FakeStorage:
 
     def __init__(self, files: Optional[Dict[str, bytes]] = None, failing: Optional[List[str]] = None) -> None:
@@ -97,9 +119,11 @@ def build_usecase(
         export_storage: Optional[FakeStorage] = None,
         receipt_storage: Optional[FakeStorage] = None,
         export_purger: Optional[FakeExportPurger] = None,
+        balance_cache: Optional[FakeBalanceCache] = None,
         erasure_repository: Optional[FakeErasureRepository] = None
 ) -> EraseAccountUseCase:
     return EraseAccountUseCase(
+        balance_cache=balance_cache if balance_cache is not None else FakeBalanceCache(),
         export_storage=export_storage if export_storage is not None else FakeStorage(),
         export_purger=export_purger if export_purger is not None else FakeExportPurger(),
         receipt_storage=receipt_storage if receipt_storage is not None else FakeStorage(),
@@ -181,6 +205,24 @@ async def test_files_are_not_touched_when_account_is_absent() -> None:
         await usecase.execute(erase_account_request=build_request())
 
     assert receipt_storage.files
+
+
+async def test_erasure_purges_cached_balance_of_the_subject() -> None:
+    balance_cache = FakeBalanceCache()
+
+    await build_usecase(balance_cache=balance_cache).execute(erase_account_request=build_request())
+
+    assert balance_cache.invalidated == [USER_ID]
+
+
+async def test_cached_balance_survives_when_account_is_absent() -> None:
+    balance_cache = FakeBalanceCache()
+    usecase = build_usecase(balance_cache=balance_cache, erasure_repository=FakeErasureRepository(found=False))
+
+    with pytest.raises(AccountNotFoundError):
+        await usecase.execute(erase_account_request=build_request())
+
+    assert balance_cache.invalidated == []
 
 
 async def test_erasure_counts_every_cascaded_resource() -> None:

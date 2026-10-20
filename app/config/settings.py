@@ -108,6 +108,31 @@ class ServiceSettings(BaseSettings):
         examples=[2]
     )
 
+    BALANCE_CACHE_ENABLED: bool = Field(
+        default=True,
+        description="Liga a camada Cache-Aside do saldo consolidado no Redis. Desligada, toda consulta vai direto "
+                    "ao PostgreSQL, o que permite medir o 'antes' e o 'depois' com o mesmo binário.",
+        examples=[True]
+    )
+
+    BALANCE_CACHE_TTL_SECONDS: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+        description="Tempo de vida da cópia do saldo no cache. É a rede de segurança da invalidação na escrita: "
+                    "se um DEL falhar, a cópia divergente sobrevive no máximo este prazo.",
+        examples=[3600]
+    )
+
+    BALANCE_CACHE_TIMEOUT_SECONDS: float = Field(
+        default=0.25,
+        gt=0,
+        le=5,
+        description="Tempo máximo de uma operação no cache do saldo. Estourado, a operação vira MISS e a consulta "
+                    "segue para o PostgreSQL: o cache nunca pode ser mais lento que a fonte que ele acelera.",
+        examples=[0.25]
+    )
+
     RECEIPT_STORAGE_ROOT: str = Field(
         default="/var/lib/controlaai/receipts",
         description="Diretório raiz dos comprovantes. "
